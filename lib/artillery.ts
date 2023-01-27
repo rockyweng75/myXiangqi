@@ -11,7 +11,7 @@ export default class Artillery extends JumpPiece {
         faction: string 
     ){
         super(ctx, id, coordinate, width, height, faction)
-        this.text = this.faction === "black" ? '包': '炮';
+        this.text = this.faction === "black" ? '砲': '炮';
     }
 
     initMovePoint() : MovePoint[]{

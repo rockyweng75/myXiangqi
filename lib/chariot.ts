@@ -11,7 +11,7 @@ export default class Chariot extends StraightPiece {
         faction: string 
     ){
         super(ctx, id, coordinate, width, height, faction)
-        this.text = '車';
+        this.text = this.faction === "black" ? '車': '俥'
     }
 
     initMovePoint() : MovePoint[]{

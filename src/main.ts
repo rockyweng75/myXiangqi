@@ -3,6 +3,7 @@ import { Action, ActionResult } from '../lib/main'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <div class="left">
+  黑子先行
   <div id="message">
   </div>
 </div>
