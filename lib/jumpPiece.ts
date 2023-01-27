@@ -20,12 +20,12 @@ export default abstract class JumpPiece extends Piece implements IMove{
                 let leftRights = obstacles.filter(o => o.coordinate!.cy === this.coordinate.cy);
                 // 右
                 if(obstacle.coordinate!.cx > this.coordinate.cx){
-                    let rights = leftRights.filter(o=> o.coordinate!.cx > this.coordinate.cx).sort(o => o.coordinate!.cx);
+                    let rights = leftRights.filter(o=> o.coordinate!.cx > this.coordinate.cx).sort((a, b)=>this.orderCxDesc(a, b));
                     ro = rights[0];
                     if(rights.length >= 2)
                         rot= rights[1];
                 } else {
-                    let lefts = leftRights.filter(o=> o.coordinate!.cx < this.coordinate.cx).sort(o => o.coordinate!.cx * -1);
+                    let lefts = leftRights.filter(o=> o.coordinate!.cx < this.coordinate.cx).sort((a, b) => this.orderCxAsc(a, b));
                     lo = lefts[0];
                     if(lefts.length >= 2)
                         lot = lefts[1];
@@ -36,12 +36,12 @@ export default abstract class JumpPiece extends Piece implements IMove{
                 let topBottoms = obstacles.filter(o => o.coordinate!.cx === this.coordinate.cx);
                 //下
                 if(obstacle.coordinate!.cy > this.coordinate.cy){
-                    let bottoms = topBottoms.filter(o=> o.coordinate!.cy > this.coordinate.cy).sort(o => o.coordinate!.cy * -1);
+                    let bottoms = topBottoms.filter(o=> o.coordinate!.cy > this.coordinate.cy).sort((a, b)=>this.orderCyAsc(a, b));
                     bo = bottoms[0];
                     if(bottoms.length >= 2)
                         bot = bottoms[1]
                 } else {
-                    let tops = topBottoms.filter(o=> o.coordinate!.cy < this.coordinate.cy).sort(o => o.coordinate!.cy * -1);
+                    let tops = topBottoms.filter(o=> o.coordinate!.cy < this.coordinate.cy).sort((a, b)=>this.orderCyDesc(a, b));
                     to = tops[0];
                     if(tops.length >= 2)
                         tot = tops[1]
@@ -63,8 +63,8 @@ export default abstract class JumpPiece extends Piece implements IMove{
                         }
                     }
                     if(rot){
-                        if(point.coordinate!.cid === rot?.coordinate!.cid) {
-                            point.isTarget = true;
+                        if(point.coordinate!.cid === rot?.coordinate!.cid ) {
+                            if(rot.faction !== this.faction) point.isTarget = true;
                         }
                     }
                 // 左
@@ -79,7 +79,7 @@ export default abstract class JumpPiece extends Piece implements IMove{
 
                     if(lot){
                         if(point.coordinate!.cid === lot?.coordinate!.cid) {
-                            point.isTarget = true;
+                            if(lot.faction !== this.faction) point.isTarget = true;
                         }
                     }
                 }
@@ -98,7 +98,7 @@ export default abstract class JumpPiece extends Piece implements IMove{
 
                     if(bot){
                         if(point.coordinate!.cid === bot?.coordinate!.cid) {
-                            point.isTarget = true;
+                            if(bot.faction !== this.faction) point.isTarget = true;
                         }
                     }
                 // 上
@@ -113,7 +113,8 @@ export default abstract class JumpPiece extends Piece implements IMove{
 
                     if(tot){
                         if(point.coordinate!.cid === tot?.coordinate!.cid) {
-                            point.isTarget = true;
+                            console.log(point.faction, this.faction)
+                            if(tot.faction !== this.faction) point.isTarget = true;
                         }
                     }
                 }
@@ -122,5 +123,4 @@ export default abstract class JumpPiece extends Piece implements IMove{
         })
         return points;
     }
-
 }
