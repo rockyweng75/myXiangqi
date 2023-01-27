@@ -17,9 +17,9 @@ export default interface IItem extends IMove {
 
     isInside (mouseX: number, mouseY: number) : boolean
 
-    move (coordinate: Coordinate) : void
+    move (coordinate: Coordinate) : Promise<void>
 
-    resize (newWidth: number, newHeight: number) : void
+    resize (newWidth: number, newHeight: number) : Promise<void>
 
     print() : void
 

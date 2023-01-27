@@ -17,10 +17,10 @@ export default abstract class StraightPiece extends Piece implements IMove{
                 // 右
                 if(obstacle.coordinate!.cx > this.coordinate.cx){
                     let rights = leftRights.filter(o=> o.coordinate!.cx > this.coordinate.cx).sort(o => o.coordinate!.cx);
-                    ro = rights[0];
+                    ro = rights.sort(this.orderCxAsc)[0];
                 } else {
                     let lefts = leftRights.filter(o=> o.coordinate!.cx < this.coordinate.cx).sort(o => o.coordinate!.cx * -1);
-                    lo = lefts[0];
+                    lo = lefts.sort(this.orderCxDesc)[0];
                 }
             }
             // 上下
@@ -29,10 +29,10 @@ export default abstract class StraightPiece extends Piece implements IMove{
                 //下
                 if(obstacle.coordinate!.cy > this.coordinate.cy){
                     let bottoms = topBottoms.filter(o=> o.coordinate!.cy > this.coordinate.cy).sort(o => o.coordinate!.cy * -1);
-                    bo = bottoms[0];
+                    bo = bottoms.sort(this.orderCyAsc)[0];
                 } else {
                     let tops = topBottoms.filter(o=> o.coordinate!.cy < this.coordinate.cy).sort(o => o.coordinate!.cy * -1);
-                    to = tops[0];
+                    to = tops.sort(this.orderCyDesc)[0];
                 }
             }
         })

@@ -54,15 +54,21 @@ export default abstract class Piece implements IItem, IMove {
         return false
     }
 
-    move(coordinate: Coordinate): void {
-        this.x = coordinate.x;
-        this.y = coordinate.y;
-        this.coordinate = coordinate;
+    move(coordinate: Coordinate): Promise<void>{
+        return new Promise((resolve)=>{
+            this.x = coordinate.x;
+            this.y = coordinate.y;
+            this.coordinate = coordinate;
+            resolve();
+        });
     }
 
-    resize (newWidth: number, newHeight: number) : void {
-        this.width = newWidth;
-        this.height = newHeight;
+    resize (newWidth: number, newHeight: number): Promise<void> {
+        return new Promise((resolve)=>{
+            this.width = newWidth;
+            this.height = newHeight;
+            resolve();
+        });
     }
 
     print() : void{
@@ -124,5 +130,31 @@ export default abstract class Piece implements IItem, IMove {
     abstract initMovePoint() : MovePoint[]
 
     abstract decidePoint(points: MovePoint[], allItems: IItem[]): MovePoint[];
+
+    orderCxAsc(a: IItem, b: IItem){
+        if(a.coordinate!.cx > b.coordinate!.cx) return 1
+        if(a.coordinate!.cx < b.coordinate!.cx) return -1
+        return 0;
+    }
+
+    
+    orderCxDesc(a: IItem, b: IItem){
+        if(a.coordinate!.cx > b.coordinate!.cx) return -1
+        if(a.coordinate!.cx < b.coordinate!.cx) return 1
+        return 0;
+    }
+
+    orderCyAsc(a: IItem, b: IItem){
+        if(a.coordinate!.cy > b.coordinate!.cy) return 1
+        if(a.coordinate!.cy < b.coordinate!.cy) return -1
+        return 0;
+    }
+
+    
+    orderCyDesc(a: IItem, b: IItem){
+        if(a.coordinate!.cy > b.coordinate!.cy) return -1
+        if(a.coordinate!.cy < b.coordinate!.cy) return 1
+        return 0;
+    }
 
 }

@@ -494,7 +494,7 @@ export default class Action {
                         undefined));
                 }
             }
-
+            
             this.removeItem = undefined;
 
         }
@@ -502,15 +502,19 @@ export default class Action {
 
     rollback(): Function{
         return ()=>{
-            this.selectedItem!.move(this.movePoints[0].coordinate);
-            this.movePoints = this.selectedItem!.focus(true);
-            this.$confirm = null;
-            this.isMove = false;
-            if(this.removeItem){
-                this.items.push(this.removeItem!);
-                this.removeItem = undefined;
-            }
+            this.selectedItem!.move(this.movePoints[0].coordinate)
+            .then(()=>{
+                this.$confirm = null;
+                this.isMove = false;
+                if(this.removeItem){
+                    this.items.push(this.removeItem!);
+                    this.removeItem = undefined;
+                }
 
+                this.movePoints = this.selectedItem!.focus(true);
+
+
+            });
         }
 
     }
