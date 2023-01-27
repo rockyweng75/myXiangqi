@@ -31,8 +31,8 @@ export default defineConfig(({command, mode}) => {
       build: {
         lib: {
           entry: './lib/main.ts',
-          name: 'Xiangqi',
-          fileName: 'Xiangqi',
+          name: 'xiangqi',
+          fileName: 'xiangqi',
           formats: ['es']
         },
         // server: {
