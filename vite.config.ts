@@ -29,13 +29,14 @@ export default defineConfig(({command, mode}) => {
         },
       },
       build: {
-        commonjsOptions: {
-          include: /node_modules|libs/,
-        },
         lib: {
           entry: './lib/main.ts',
           name: 'Xiangqi',
-          fileName: 'Xiangqi'
+          fileName: 'Xiangqi',
+          formats: ['es']
+        },
+        server: {
+          open: '/index.html'
         },
         rollupOptions: {
           input: {
@@ -43,7 +44,7 @@ export default defineConfig(({command, mode}) => {
           },
           output: {
             format: 'es',
-            dir: 'dist'
+            dir: 'dist',
           }
         },
       }
