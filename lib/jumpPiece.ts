@@ -1,4 +1,4 @@
-import MovePoint from './MovePoint'
+import MovePoint from './movepoint'
 import IMove from './imove';
 import IItem from './iItem';
 import Piece from './piece';
