@@ -35,9 +35,9 @@ export default defineConfig(({command, mode}) => {
           fileName: 'Xiangqi',
           formats: ['es']
         },
-        server: {
-          open: '/index.html'
-        },
+        // server: {
+        //   open: '/index.html'
+        // },
         rollupOptions: {
           input: {
             main: path.resolve(__dirname, 'index.html'),
