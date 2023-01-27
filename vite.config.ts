@@ -22,7 +22,7 @@ export default defineConfig(({command, mode}) => {
   //   }
   // } else {
     return {
-      base: '/MyXiangqi/',
+      base: '/myXiangqi/',
       resolve: {
         alias: {
           "@": path.resolve(__dirname, "src"),
