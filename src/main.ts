@@ -29,7 +29,7 @@ function init (){
   canvas.oncommit = (res: ActionResult)=>{
     console.log('oncommit', res)
     if(res.message){
-      document.getElementById("message")!.innerHTML += res.message; 
+      document.getElementById("message")!.innerHTML += '<li>'+ res.message  + '</li>'; 
     }
   }
 }
