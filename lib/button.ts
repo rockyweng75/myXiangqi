@@ -1,9 +1,7 @@
-import Coordinate from "./coordinate"
 export default class Button {
     ctx : CanvasRenderingContext2D | null;
     x: number;
     y: number;
-    coordinate: Coordinate | undefined;
     width : number;
     height : number;
     text: string;
@@ -44,12 +42,6 @@ export default class Button {
             return true;
         }
         else return false;
-    }
-
-    move(coordinate: Coordinate): void {
-        this.x = coordinate.x;
-        this.y = coordinate.y;
-        this.coordinate = coordinate;
     }
 
     resize (newWidth: number, newHeight: number) : void{

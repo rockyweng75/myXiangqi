@@ -4,9 +4,9 @@
   line-height: 24px;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: #e8ecf1;
+  background-color: #1b1f27;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,13 +15,17 @@
   -webkit-text-size-adjust: 100%;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #c78f39;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #e0ab55;
 }
 
 body {
@@ -32,36 +36,11 @@ body {
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
 #app {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #3178c6aa);
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
 }
 
 button {
@@ -71,49 +50,152 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #242b38;
+  color: #e8ecf1;
   cursor: pointer;
   transition: border-color 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: #c78f39;
 }
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: 4px auto #c78f39;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+.game-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5em;
+  width: 100%;
+}
+
+.game-layout__board {
+  width: 100%;
+  max-width: 500px;
+}
+
+.game-layout__board canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background-color: #e8cf9c;
+  border-radius: 8px;
+}
+
+.game-layout__panel {
+  width: 100%;
+  max-width: 500px;
+  text-align: left;
+  background: #242b38;
+  border: 1px solid #3a4454;
+  border-radius: 8px;
+  padding: 1em;
+}
+
+.turn-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.8em;
+  margin-bottom: 0.75em;
+  border-radius: 999px;
+  font-weight: 600;
+  background: #1b1f27;
+}
+
+.turn-indicator__dot {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.turn-indicator--black { color: #cfd6e0; }
+.turn-indicator--red { color: #e0664f; }
+.turn-indicator--over { color: #c78f39; background: #2b2320; }
+
+#message {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0.75em 0 0;
+  padding: 0.5em 0.5em 0.5em 1.5em;
+  list-style: decimal;
+}
+
+#message li {
+  padding: 0.15em 0;
+}
+
+@media (min-width: 860px) {
+  .game-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2em;
   }
-  a:hover {
-    color: #747bff;
+
+  .game-layout__board {
+    flex: 0 0 500px;
   }
-  button {
-    background-color: #f9f9f9;
+
+  .game-layout__panel {
+    width: auto;
+    flex: 1 1 260px;
+    max-width: 320px;
   }
 }
 
-canvas{
-  background-color: beige;
+.mode-select {
+  text-align: center;
 }
 
-#message{
-  background-color: beige;
-  border: #1a1a1a solid;
-  height: 500px;
-  width: 100px;
-  content: ' ';
-  margin-right: 1em;
-  overflow: auto;
+.mode-select__menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  justify-content: center;
+  margin: 1em 0;
 }
 
-.rigth{
-  float:right;
+.mode-select__panel {
+  margin-top: 1em;
 }
 
-.left{
-  float:left;
+.online-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75em;
+}
+
+.online-picker__join {
+  display: flex;
+  gap: 0.5em;
+}
+
+.online-picker__join input {
+  font-size: 1em;
+  padding: 0.4em;
+  width: 8em;
+  text-transform: uppercase;
+  background: #242b38;
+  color: #e8ecf1;
+  border: 1px solid #3a4454;
+  border-radius: 8px;
+}
+
+#status {
+  min-height: 1.5em;
+  font-size: 0.9em;
+}
+
+.status--thinking {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }

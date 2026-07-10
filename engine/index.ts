@@ -1,0 +1,11 @@
+export * from './types';
+export { BOARD_WIDTH, BOARD_HEIGHT, idx, inBounds, squaresEqual, getPieceAt, parsePieceId, createInitialState } from './board';
+export { applyMove, undoMove, cloneState } from './apply';
+export { getPseudoLegalMoves } from './pieceRules';
+export { getLegalMoves, getAllLegalMoves, isInCheck, isCheckmate, isStalemate, kingsFaceOff } from './rules';
+export { serializeState, deserializeState } from './serialize';
+export { evaluate } from './ai/evaluate';
+export { findBestMove } from './ai/search';
+export type { SearchOptions, SearchResult } from './ai/search';
+export { DIFFICULTY_PRESETS } from './ai/difficulty';
+export type { Difficulty } from './ai/difficulty';

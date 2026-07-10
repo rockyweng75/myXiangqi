@@ -1,524 +1,471 @@
-import IItem from "./iItem";
-import King from "./king";
-import Shi from "./shi";
-import Siang from "./siang";
-import Horse from "./horse";
-import Chariot from './chariot'
-import Artillery from './artillery'
-import Soldier from './soldier'
-import Coordinate from "./coordinate";
-import Confirm from "./confirm";
-import MovePoint from "./movepoint";
-import ActionResult from "./actionResult";
+import {
+  Difficulty,
+  Faction,
+  GameState,
+  Move,
+  PieceId,
+  Square,
+  applyMove,
+  createInitialState,
+  deserializeState,
+  getAllLegalMoves,
+  getLegalMoves,
+  getPieceAt,
+  isInCheck,
+  parsePieceId,
+  serializeState,
+} from '../engine';
+import AIMoveSource from './ai/aiMoveSource';
+import { BoardGeometry, pixelToSquare } from './geometry';
+import PieceView from './pieceView';
+import MovePoint from './movepoint';
+import Confirm from './confirm';
+import ActionResult from './actionResult';
+import { glyphFor } from './pieceGlyph';
+import RoomConnection from './net/roomConnection';
+import { NetMessage } from './net/protocol';
+import { Theme } from './theme';
 
-const Xids: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
+const Xids: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+
 export default class Action {
-    canvas : HTMLCanvasElement;
-    ctx : CanvasRenderingContext2D | null = null;
-    width : number;
-    height : number;
-    static itemWidth : number = 30;
-    static itemHeight: number = 30;
-    static originX : number = 20
-    static originY : number = 20;
-    startX : number = 0;
-    startY : number = 0;
-    offsetX : number = 0;
-    offsetY : number = 0;
-    scrollX: number = 0;
-    scrollY: number = 0;
-    columnX: number = 8;
-    columnY: number = 9;
-    columnWidth: number = 0;
-    columnHeight: number = 0;
-    currnetFaction: string = "black";
-    isDown = false;
-    isDrop = false;
-    isMove = false;
-    isOver = false;
-    items : IItem[] = [];
-    selectedItem: IItem | null = null;
-    movePoints: MovePoint[] = [];
-    $confirm: Confirm | null = null;
-    static Xids: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
-    oncommit: Function | undefined;
-    removeItem : IItem | undefined = undefined;
-    
-    constructor(canvas : HTMLCanvasElement){
-        this.width = canvas.width - Action.originX * 2;
-        this.height = canvas.height - Action.originY * 2;
-        this.canvas = canvas;
-        this.columnWidth = Math.floor(this.width / 8);
-        this.columnHeight = Math.floor(this.height / 9);
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D | null = null;
+  width: number;
+  height: number;
+  static itemWidth: number = 30;
+  static itemHeight: number = 30;
+  static originX: number = 20;
+  static originY: number = 20;
+  columnWidth: number = 0;
+  columnHeight: number = 0;
+  isOver = false;
+  state: GameState = createInitialState();
+  items: PieceView[] = [];
+  selectedItem: PieceView | null = null;
+  movePoints: MovePoint[] = [];
+  $confirm: Confirm | null = null;
+  oncommit: Function | undefined;
+  aiMoveSource: AIMoveSource | null = null;
+  onAIThinking: ((thinking: boolean) => void) | undefined;
+  remote: RoomConnection | null = null;
+  onRemoteStatus: ((status: 'open' | 'closed' | 'error') => void) | undefined;
 
-        if (this.canvas.getContext) {
-            this.ctx = this.canvas.getContext('2d');
-            this.offsetX = this.canvas.offsetLeft;
-            this.offsetY = this.canvas.offsetTop;
-            this.scrollX = window.scrollX;
-            this.scrollY = window.scrollY;
+  // Staged (not-yet-committed) move state, undone by rollback().
+  private pendingMove: Move | null = null;
+  private pendingRemovedView: PieceView | null = null;
+  private pendingFrom: Square | null = null;
 
-            this.canvas.onresize = e => this.handleResize(e);
-            this.canvas.onscroll = e => this.handleResize(e);
-            this.canvas.onmousedown = async e => await this.handleMouseDown(e);
-            this.canvas.onmousemove = async e => await this.handleMouseMove(e);
-            this.canvas.onmouseup = e => this.handleMouseUp(e);
-            this.canvas.onmouseout = e => this.handleMouseOut(e);
+  constructor(canvas: HTMLCanvasElement) {
+    this.width = canvas.width - Action.originX * 2;
+    this.height = canvas.height - Action.originY * 2;
+    this.canvas = canvas;
+    this.columnWidth = Math.floor(this.width / 8);
+    this.columnHeight = Math.floor(this.height / 9);
+
+    if (this.canvas.getContext) {
+      this.ctx = this.canvas.getContext('2d');
+      this.canvas.onmousedown = async (e) => await this.handleMouseDown(e);
+      this.canvas.onmouseup = (e) => this.handleMouseUp(e);
+      this.canvas.onmouseout = (e) => this.handleMouseOut(e);
+    } else {
+      alert('error');
+    }
+  }
+
+  get geometry(): BoardGeometry {
+    return {
+      originX: Action.originX,
+      originY: Action.originY,
+      columnWidth: this.columnWidth,
+      columnHeight: this.columnHeight,
+    };
+  }
+
+  async handleMouseDown(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (this.isOver) return;
+    if (this.aiMoveSource && this.state.turn === this.aiMoveSource.faction) return;
+    if (this.remote && this.state.turn !== this.remote.localFaction) return;
+
+    // The canvas is scaled down via CSS on narrow viewports while its internal
+    // drawing resolution stays fixed, so clicks must be rescaled into that
+    // internal pixel space (board/piece geometry is computed from canvas.width/height).
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const startX = (e.clientX - rect.left) * scaleX;
+    const startY = (e.clientY - rect.top) * scaleY;
+
+    let isReload = false;
+
+    if (this.$confirm) {
+      isReload = this.$confirm.onclick(startX, startY);
+    } else {
+      isReload = this.handleBoardClick(startX, startY);
+    }
+
+    if (isReload) {
+      await this.clear();
+      await this.print();
+    }
+  }
+
+  private handleBoardClick(startX: number, startY: number): boolean {
+    let isReload = false;
+
+    // Clicking an existing move point stages a move.
+    for (const point of this.movePoints) {
+      if (point.isInside(startX, startY) && this.selectedItem) {
+        this.stagePendingMove(this.selectedItem, point);
+        return true;
+      }
+    }
+
+    // Otherwise, treat this as (de)selecting a piece.
+    this.items.forEach((item) => {
+      if (item.isInside(startX, startY) && item.faction === this.state.turn) {
+        if (this.selectedItem !== null && this.selectedItem.id === item.id) {
+          this.deselect();
         } else {
-            alert('error')
+          this.select(item);
         }
+        isReload = true;
+      } else {
+        item.focus(false);
+      }
+    });
+
+    if (!isReload) {
+      this.deselect();
     }
 
-    handleResize(e: Event){
-        e.preventDefault();
-        e.stopPropagation();
-        this.offsetX = this.canvas.offsetLeft;
-        this.offsetY = this.canvas.offsetTop;
-        this.scrollX = window.scrollX;
-        this.scrollY = window.scrollY;
+    return isReload;
+  }
+
+  private select(item: PieceView): void {
+    this.items.forEach((i) => i.focus(false));
+    item.focus(true);
+    this.selectedItem = item;
+    const legalSquares = getLegalMoves(this.state, item.id);
+    this.movePoints = legalSquares.map(
+      (square) => new MovePoint(this.ctx!, square, this.geometry, item.width, item.height, !!getPieceAt(this.state, square))
+    );
+  }
+
+  private deselect(): void {
+    this.items.forEach((i) => i.focus(false));
+    this.selectedItem = null;
+    this.movePoints = [];
+  }
+
+  private stagePendingMove(item: PieceView, point: MovePoint): void {
+    this.pendingFrom = item.square;
+    this.pendingMove = { pieceId: item.id, from: item.square, to: point.square };
+
+    if (point.isCapture) {
+      const captured = this.items.find((i) => i.square.x === point.square.x && i.square.y === point.square.y);
+      if (captured) {
+        this.pendingRemovedView = captured;
+        this.items = this.items.filter((i) => i.id !== captured.id);
+      }
     }
 
-    handleScroll(e: Event){
-        e.preventDefault();
-        e.stopPropagation();
-        this.scrollX = window.scrollX;
-        this.scrollY = window.scrollY;
+    item.syncTo(point.square, this.geometry);
+    this.movePoints = [new MovePoint(this.ctx!, point.square, this.geometry, item.width, item.height, false)];
+
+    const id = Date.now().toFixed();
+    this.$confirm = new Confirm(this.ctx!, id, this.width / 3, this.height / 2, 200, 60, this.commit(), this.rollback());
+  }
+
+  handleMouseUp(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  handleMouseOut(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  printBorder() {
+    this.ctx!.save();
+    this.ctx!.translate(Action.originX, Action.originY);
+    this.ctx!.beginPath();
+    this.ctx!.fillStyle = Theme.boardText;
+    for (let i = 0; i <= 8; i++) {
+      this.ctx!.moveTo(i * this.columnWidth, 0);
+      this.ctx!.lineTo(i * this.columnWidth, this.columnHeight * 9);
+      this.ctx!.fillText(Xids[i], i * this.columnWidth, -5);
+    }
+    for (let y = 0; y <= 9; y++) {
+      this.ctx!.moveTo(0, y * this.columnHeight);
+      this.ctx!.lineTo(this.columnWidth * 8, y * this.columnHeight);
+      this.ctx!.fillText(y.toString(), -10, y * this.columnHeight);
     }
 
-    async handleMouseDown(e: MouseEvent) {
-        e.preventDefault();
-        e.stopPropagation();
+    this.ctx!.moveTo(3 * this.columnWidth, 0);
+    this.ctx!.lineTo(5 * this.columnWidth, 2 * this.columnHeight);
+    this.ctx!.moveTo(5 * this.columnWidth, 0);
+    this.ctx!.lineTo(3 * this.columnWidth, 2 * this.columnHeight);
 
-        if(this.isOver) return;
+    this.ctx!.moveTo(3 * this.columnWidth, 7 * this.columnHeight);
+    this.ctx!.lineTo(5 * this.columnWidth, 9 * this.columnHeight);
+    this.ctx!.moveTo(5 * this.columnWidth, 7 * this.columnHeight);
+    this.ctx!.lineTo(3 * this.columnWidth, 9 * this.columnHeight);
 
-        this.startX = e.clientX - this.offsetX + this.scrollX;
-        this.startY = e.clientY - this.offsetY + this.scrollY;
+    this.ctx!.strokeStyle = Theme.boardGrid;
+    this.ctx!.stroke();
+    this.ctx!.clearRect(1, 4 * this.columnHeight + 1, this.columnWidth * 8 - 2, this.columnHeight - 2);
+    this.ctx!.restore();
+    this.ctx!.save();
+    this.ctx!.font = 'normal normal 900 30px sans-serif';
+    this.ctx!.textBaseline = 'middle';
+    this.ctx!.fillStyle = Theme.boardText;
+    this.ctx!.translate(this.columnWidth * 2 + this.columnWidth / 2, 4 * this.columnHeight + Action.originY + this.columnHeight / 2);
+    this.ctx!.fillText('楚河', 0, 0);
+    this.ctx!.restore();
 
-        let isReload = false || this.selectedItem != null;
+    this.ctx!.save();
+    this.ctx!.font = 'normal normal 900 30px sans-serif';
+    this.ctx!.textBaseline = 'middle';
+    this.ctx!.fillStyle = Theme.boardText;
+    this.ctx!.translate(this.columnWidth * 6 + this.columnWidth / 2, 4 * this.columnHeight + Action.originY + this.columnHeight / 2);
+    this.ctx!.rotate((180 * Math.PI) / 180);
+    this.ctx!.fillText('漢界', 0, 0);
+    this.ctx!.restore();
+  }
 
-        if(this.$confirm){
-            isReload = this.$confirm.onclick(this.startX, this.startY)
+  print(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.printBorder();
+
+      this.items.forEach((item) => item.print());
+
+      this.movePoints.forEach((point) => {
+        if (point.isCapture) {
+          point.printCapture();
         } else {
-            // this.isMove = false;
-
-            this.items.forEach(item =>{
-                if(item.isInside(this.startX, this.startY) && item.faction === this.currnetFaction){
-                    if(this.selectedItem !== null && this.selectedItem!.id === item.id){
-                        this.movePoints = item.focus(false);
-                        this.selectedItem = null;
-                    } else {
-                        this.movePoints = item.focus(true);
-                        // let obstacles= this.items.filter(o => this.movePoints.some(m => m.coordinate.cid === o.coordinate!.cid));
-                        this.movePoints = item.decidePoint(this.movePoints, this.items);
-                        this.selectedItem = item;
-                    }
-                    isReload = true;
-                } else {
-                    item.focus(false);
-                }
-            });
-
-            if(this.movePoints)
-                this.movePoints.forEach(item =>{
-                    if(item.isInside(this.startX, this.startY)){
-                        this.isMove = true;
-                        let newCid = item.coordinate.clone(0, 0)!;
-                        this.movePoints = []
-                        this.movePoints.push(new MovePoint(
-                            this.ctx!,
-                            this.selectedItem!.coordinate!,
-                            this.selectedItem!.width,
-                            this.selectedItem!.height)
-                        )
-                        if(item.isTarget){
-                            for(let i = 0; i < this.items.length; i++){
-                                if(this.items[i].coordinate?.cid === item.cid){
-                                    this.removeItem = this.items.splice(i, 1)[0];
-                                }
-                            }                        
-                        }   
-                        this.selectedItem!.move(newCid);
-
-                        let id = Date.now().toFixed();
-                        this.$confirm = new Confirm(this.ctx!, id, this.width/3, this.height/2, 200, 60, 
-                            this.commit(), 
-                            this.rollback());
-                    } 
-                })
-
-            
-            if(this.isMove){
-
-            } else {
-                if(this.items.filter(o => o.isFocus).length == 0) {
-                    this.selectedItem = null;
-                    this.movePoints = [];
-                }
-            }
-
+          point.print();
         }
+      });
 
-        this.isDown = true;
+      if (this.pendingMove && this.$confirm) {
+        this.$confirm.print();
+      }
 
-        if(isReload){
-            await this.clear();
-            await this.print();       
-        }   
+      resolve();
+    });
+  }
+
+  clear(): Promise<void> {
+    return new Promise((resolve) => {
+      this.ctx!.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      resolve();
+    });
+  }
+
+  pixelToSquare(x: number, y: number): Square {
+    return pixelToSquare(x, y, this.geometry);
+  }
+
+  init(): Promise<void> {
+    return new Promise((resolve) => {
+      this.state = createInitialState();
+      this.isOver = false;
+      this.rebuildItems();
+      resolve();
+    });
+  }
+
+  setAIOpponent(faction: Faction, difficulty: Difficulty): void {
+    this.aiMoveSource?.dispose();
+    this.aiMoveSource = new AIMoveSource(faction, difficulty);
+    void this.maybeTriggerAI();
+  }
+
+  private async maybeTriggerAI(): Promise<void> {
+    if (this.isOver || !this.aiMoveSource || this.state.turn !== this.aiMoveSource.faction) return;
+    this.onAIThinking?.(true);
+    try {
+      const move = await this.aiMoveSource.requestMove(this.state);
+      await this.applyExternalMove(move);
+    } finally {
+      this.onAIThinking?.(false);
     }
-    
-    handleMouseUp(e: MouseEvent) {
-        e.preventDefault();
-        e.stopPropagation();
-    
-        // the drag is over, clear the dragging flag
-        this.isDown = false;
-    }
-    
-    handleMouseOut(e: MouseEvent) {
-        e.preventDefault();
-        e.stopPropagation();
-    
-        // the drag is over, clear the dragging flag
-        this.isDown = false;
-    }
-    
-    async handleMouseMove (e: MouseEvent) {
-        e.preventDefault();
-        e.stopPropagation();
-        // // if we're not dragging, just return
-        // if (!this.isDown) {
-        //     return;
-        // }
-    
-        // get the current mouse position
-        // let mouseX = e.clientX - this.offsetX + this.scrollX;
-        // let mouseY = e.clientY - this.offsetY + this.scrollY;
-        // let isReload = false 
-        // if(this.items){
-        //     this.items.forEach(async (item) =>{
-        //         // 拖曳
-        //         if( this.isDown && this.isDrop ){
-        //             isReload = true;
-        //         } else if(this.isDown && item.isInside(this.startX, this.startY)){
-        //             this.selectedItem = item 
-        //             this.isDrop = true;
-        //         } else {
-        //             this.isDrop = false;
-        //         }              
-        //     })
-        // }
+  }
 
-        // if(isReload){
-        //     if(!this.isOverSide(mouseX, mouseY, this.selectedItem!.width, this.selectedItem!.height))
-        //     {
-        //         this.selectedItem!.dropMove(mouseX, mouseY);
-        //         await this.clear();
-        //         await this.print();       
-        //     }
-        // }
-    }
+  loadState(state: GameState): void {
+    this.state = state;
+    this.isOver = false;
+    this.rebuildItems();
+    this.deselect();
+  }
 
-    printBorder(){
+  attachRemote(connection: RoomConnection): void {
+    this.remote?.dispose();
+    this.remote = connection;
+    connection.onMessage = (message) => void this.handleRemoteMessage(message);
+    connection.onStateChange = (state) => {
+      if (state !== 'connecting') this.onRemoteStatus?.(state);
+    };
+  }
 
-        this.ctx!.save();
-        this.ctx!.translate(Action.originX, Action.originY);
-        this.ctx!.beginPath();
-        for(let i = 0; i <= 8; i ++)
-        {
-            this.ctx!.moveTo(i * this.columnWidth, 0);
-            this.ctx!.lineTo(i * this.columnWidth, this.columnHeight * 9);
-            this.ctx!.fillText(Xids[i], i * this.columnWidth, -5)
-
+  private async handleRemoteMessage(message: NetMessage): Promise<void> {
+    switch (message.type) {
+      case 'move': {
+        const legalSquares = getLegalMoves(this.state, message.move.pieceId);
+        const isLegal = legalSquares.some((sq) => sq.x === message.move.to.x && sq.y === message.move.to.y);
+        if (!isLegal) {
+          this.remote?.send({ type: 'resync-request' });
+          return;
         }
-        for(let y = 0; y <= 9; y ++)
-        {
-            this.ctx!.moveTo(0, (y * this.columnHeight));
-            this.ctx!.lineTo(this.columnWidth * 8, (y * this.columnHeight));
-            this.ctx!.fillText(y.toString(), -10, (y * this.columnHeight))
+        await this.applyExternalMove(message.move);
+        break;
+      }
+      case 'resync-request':
+        this.remote?.send({ type: 'resync-state', state: serializeState(this.state) });
+        break;
+      case 'resync-state':
+        this.state = deserializeState(message.state);
+        this.rebuildItems();
+        this.deselect();
+        await this.clear();
+        await this.print();
+        break;
+      case 'resign':
+        this.isOver = true;
+        if (this.oncommit) {
+          const winner = this.remote?.localFaction === 'black' ? '黑' : '紅';
+          this.oncommit(new ActionResult('', '', '', undefined, `${winner}方獲勝(對手認輸)`, false, true));
         }
+        break;
+      case 'hello':
+        break;
+    }
+  }
 
-        this.ctx!.moveTo(3 * this.columnWidth, 0);
-        this.ctx!.lineTo(5 * this.columnWidth, (2 * this.columnHeight));
-        this.ctx!.moveTo(5 * this.columnWidth, 0);
-        this.ctx!.lineTo(3 * this.columnWidth, (2 * this.columnHeight));
+  private persistState(): void {
+    if (!this.remote) return;
+    try {
+      sessionStorage.setItem(
+        `myxiangqi-room-${this.remote.roomCode}`,
+        JSON.stringify({ faction: this.remote.localFaction, state: serializeState(this.state) })
+      );
+    } catch {
+      // sessionStorage unavailable (private browsing, etc.) - resume just won't work.
+    }
+  }
 
-        this.ctx!.moveTo(3 * this.columnWidth, (7 * this.columnHeight));
-        this.ctx!.lineTo(5 * this.columnWidth, (9 * this.columnHeight));
-        this.ctx!.moveTo(5 * this.columnWidth, (7 * this.columnHeight));
-        this.ctx!.lineTo(3 * this.columnWidth, (9 * this.columnHeight));
+  /** Restores a mid-game state for `roomCode` saved by persistState(), if any. */
+  static loadPersistedState(roomCode: string): GameState | null {
+    try {
+      const raw = sessionStorage.getItem(`myxiangqi-room-${roomCode}`);
+      if (!raw) return null;
+      const { state } = JSON.parse(raw);
+      return deserializeState(state);
+    } catch {
+      return null;
+    }
+  }
 
-        this.ctx!.strokeStyle = "#99999"
-        this.ctx!.stroke();
-        this.ctx!.clearRect(
-                1,  
-                (4 * this.columnHeight) + 1 , 
-                this.columnWidth * 8 - 2, 
-                this.columnHeight - 2);
-        this.ctx!.restore();
-        this.ctx!.save();
-        this.ctx!.font = "normal normal 900 30px sans-serif"
-        this.ctx!.textBaseline = "middle"
-        this.ctx!.translate(this.columnWidth * 2 + this.columnWidth /2, (4 * this.columnHeight) + Action.originY + this.columnHeight/2)      
-        this.ctx!.fillText("楚河", 0, 0)
-        this.ctx!.restore();
+  private rebuildItems(): void {
+    this.items = Array.from(this.state.pieces.values()).map(
+      (piece) => new PieceView(this.ctx!, piece, this.geometry, Action.itemWidth, Action.itemHeight)
+    );
+  }
 
-        this.ctx!.save();
-        this.ctx!.font = "normal normal 900 30px sans-serif"
-        this.ctx!.textBaseline = "middle"
-        this.ctx!.translate(this.columnWidth * 6 + this.columnWidth /2, (4 * this.columnHeight) + Action.originY + this.columnHeight/2)      
-        this.ctx!.rotate(180 * Math.PI/180)
-        this.ctx!.fillText("漢界",0, 0)
-        this.ctx!.restore();
+  /** Applies an externally-sourced move (AI / remote peer) directly, without
+   * the local staged-confirm UX used for human clicks. */
+  async applyExternalMove(move: Move): Promise<ActionResult> {
+    const movingId = move.pieceId;
+    applyMove(this.state, move);
 
+    const view = this.items.find((i) => i.id === movingId);
+    view?.syncTo(move.to, this.geometry);
+
+    if (move.capturedId) {
+      this.items = this.items.filter((i) => i.id !== move.capturedId);
     }
 
-    print() : Promise<void> {
-        return new Promise<void>((resolve)=>{
+    const result = this.buildResult(movingId, move, move.capturedId);
+    await this.clear();
+    await this.print();
+    if (this.oncommit) this.oncommit(result);
+    this.persistState();
+    void this.maybeTriggerAI();
+    return result;
+  }
 
-            this.printBorder()
+  private buildResult(movingId: PieceId, move: Move, capturedId: PieceId | undefined): ActionResult {
+    const defendingFaction = this.state.turn; // already flipped by applyMove
+    const check = isInCheck(this.state, defendingFaction);
+    // Xiangqi has no draws: a side with no legal replies loses, whether
+    // checkmated or merely stalemated.
+    const noMovesLeft = getAllLegalMoves(this.state, defendingFaction).length === 0;
 
-            if(this.items) 
-                this.items
-                    .forEach(item=> {
-                        // this.ctx!.strokeStyle = item.strokeStyle;
-                        item.print()
-                    });
+    if (noMovesLeft) this.isOver = true;
 
-            if(this.movePoints) {
-                this.movePoints.forEach(item=> {
-                    if(!item.isBlock){
-                        item.print();
-                    } else if(item.isTarget){
-                        item.isTarget = true;
-                        item.print2();
-                    }
-                })
-            }
-
-            if(this.isMove && this.$confirm){
-                this.$confirm!.print();
-            }
-
-            resolve();
-        });
+    let message: string | undefined;
+    if (noMovesLeft) {
+      message = `${defendingFaction === 'black' ? '紅' : '黑'}方是贏家(${check ? '將死' : '困斃'})`;
+    } else if (check) {
+      message = `${defendingFaction === 'black' ? '黑' : '紅'}方被將軍`;
+    } else if (capturedId) {
+      const { faction, kind } = parsePieceId(capturedId);
+      message = `${glyphFor(kind, faction)}被吃掉了`;
     }
 
+    return new ActionResult(
+      movingId,
+      `${Xids[move.to.x]}${move.to.y}`,
+      `${Xids[move.from.x]}${move.from.y}`,
+      capturedId,
+      message,
+      check,
+      noMovesLeft
+    );
+  }
 
-    clear() : Promise<void>{
-        return new Promise<void>((resolve)=>{
-            this.ctx!.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            resolve();
-        });
-    }
+  commit(): Function {
+    return () => {
+      const move = this.pendingMove!;
+      const from = this.pendingFrom!;
+      const capturedId = this.pendingRemovedView?.id;
 
-    isOverSide(mouseX: number, mouseY: number, objWidth: number, objHeight: number): boolean{
-        if(mouseX < 0 || mouseY < 0){
-            return true;
-        } else if(mouseX + objWidth > this.width){
-            return true;
-        }
-        else if(mouseY + objHeight > this.height){
-            return true;
-        } else {
-            return false;
-        }
-    }
+      applyMove(this.state, move);
 
-    init(): Promise<void>{
-        return new Promise((resolve)=>{
+      this.$confirm = null;
+      this.deselect();
+      this.pendingMove = null;
+      this.pendingFrom = null;
+      this.pendingRemovedView = null;
 
-            this.items = [];
-            this.isOver = false;
-            let width = Action.itemWidth;
-            let height = Action.itemHeight;
+      const result = this.buildResult(move.pieceId, { ...move, from }, capturedId);
+      if (this.oncommit) this.oncommit(result);
+      this.remote?.send({ type: 'move', move: { pieceId: move.pieceId, from, to: move.to } });
+      this.persistState();
+      void this.maybeTriggerAI();
+    };
+  }
 
-            let factions = ['black', 'red'];
-            factions.forEach(faction =>{
-                let yid = '0';
-                let id = Date.now().toFixed();
-                if(faction !== 'black'){
-                    yid = '9';
-                }
+  rollback(): Function {
+    return () => {
+      const view = this.items.find((i) => i.id === this.pendingMove!.pieceId);
+      if (view) view.syncTo(this.pendingFrom!, this.geometry);
 
-                this.items.push(
-                    new King(this.ctx!, 
-                    id, 
-                    new Coordinate('E' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
+      if (this.pendingRemovedView) {
+        this.items.push(this.pendingRemovedView);
+      }
 
-                this.items.push(
-                    new Shi(this.ctx!, 
-                    id, 
-                    new Coordinate('D' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
+      this.$confirm = null;
+      this.pendingMove = null;
+      this.pendingFrom = null;
+      this.pendingRemovedView = null;
 
-                this.items.push(
-                    new Shi(this.ctx!, 
-                    id, 
-                    new Coordinate('F' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Siang(this.ctx!, 
-                    id, 
-                    new Coordinate('G' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Siang(this.ctx!, 
-                    id, 
-                    new Coordinate('C' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Horse(this.ctx!, 
-                    id, 
-                    new Coordinate('B' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Horse(this.ctx!, 
-                    id, 
-                    new Coordinate('H' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Chariot(this.ctx!, 
-                    id, 
-                    new Coordinate('A' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Chariot(this.ctx!, 
-                    id, 
-                    new Coordinate('I' + yid, this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-                
-                this.items.push(
-                    new Artillery(this.ctx!, 
-                    id, 
-                    new Coordinate('B' + (faction == 'black'? '2' : '7'), this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                this.items.push(
-                    new Artillery(this.ctx!, 
-                    id, 
-                    new Coordinate('H' + (faction == 'black'? '2' : '7'), this.columnWidth, this.columnHeight), 
-                    width, 
-                    height, 
-                    faction)
-                )
-
-                for(let i = 0; i < 10; i = i + 2)
-                {
-                    this.items.push(
-                        new Soldier(this.ctx!, 
-                        id, 
-                        new Coordinate(Xids[i] + (faction == 'black'? '3' : '6'), this.columnWidth, this.columnHeight), 
-                        width, 
-                        height, 
-                        faction)
-                    )
-                }
-            })
-
-            resolve();
-        })
-    }
-
-    commit(): Function{
-        return () =>{
-            let oldCid = this.movePoints[0].cid;
-            let newCid = this.selectedItem?.coordinate?.cid;
-            this.movePoints = this.selectedItem!.focus(false);
-            this.$confirm = null;
-            this.isMove = false;
-            this.isDown = false;
-            this.currnetFaction = this.currnetFaction === "black" ? "red" : "black";
-
-            if(this.oncommit){
-                if(this.removeItem){
-                    if(King.prototype.isPrototypeOf(this.removeItem!)){
-                        this.isOver = true;
-                        this.oncommit(new ActionResult(
-                            this.selectedItem!.id, 
-                            newCid!, 
-                            oldCid!,
-                            this.removeItem.constructor.name,
-                            `${this.removeItem.faction === 'black' ? 'red' : 'black' }方是贏家`));
-                    } else {
-                        this.oncommit(new ActionResult(
-                            this.selectedItem!.id, 
-                            newCid!, 
-                            oldCid!,
-                            this.removeItem.constructor.name,
-                            `${this.removeItem.text}被吃掉了`
-                        ));
-                    }
-                } else{
-                    this.oncommit(new ActionResult(
-                        this.selectedItem!.id,
-                        newCid!, 
-                        oldCid!,
-                        undefined,
-                        undefined));
-                }
-            }
-            
-            this.removeItem = undefined;
-
-        }
-    }
-
-    rollback(): Function{
-        return ()=>{
-            this.selectedItem!.move(this.movePoints[0].coordinate)
-            .then(()=>{
-                this.$confirm = null;
-                this.isMove = false;
-                if(this.removeItem){
-                    this.items.push(this.removeItem!);
-                    this.removeItem = undefined;
-                }
-
-                this.movePoints = this.selectedItem!.focus(true);
-
-
-            });
-        }
-
-    }
-} 
-
-
-
+      if (view) this.select(view);
+    };
+  }
+}

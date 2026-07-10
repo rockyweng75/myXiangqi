@@ -1,5 +1,6 @@
 import Button from "./button"
-export default class confirm {
+import { Theme } from "./theme"
+export default class Confirm {
     ctx : CanvasRenderingContext2D | null;
     x: number;
     y: number;
@@ -27,36 +28,39 @@ export default class confirm {
         this.width = width;
         this.height = height;
         this.buttons = [
-            new Button(this.ctx, 
+            new Button(this.ctx,
                 this.id + 's',
-                this.x + 10, 
+                this.x + 10,
                 this.y + 10,
                 80,
                 40,
                 "確定",
-                "dodgerblue",
+                Theme.confirmButton,
                 commit
             ),
-            new Button(this.ctx, 
+            new Button(this.ctx,
                 this.id + 'e',
-                this.x + this.width - 90 , 
+                this.x + this.width - 90 ,
                 this.y + 10,
                 80,
                 40,
                 "取消",
-                "red",
+                Theme.cancelButton,
                 rollback
             )
         ]
     }
-    
+
     print() : void{
         this.ctx!.save();
         this.ctx!.translate(this.x, this.y);
         this.ctx!.beginPath();
-        this.ctx!.fillStyle = "white";
+        this.ctx!.fillStyle = Theme.dialogBg;
         this.ctx!.rect(0, 0, this.width, this.height);
         this.ctx!.fill();
+        this.ctx!.lineWidth = 2;
+        this.ctx!.strokeStyle = Theme.dialogBorder;
+        this.ctx!.stroke();
         this.ctx!.restore();
 
         this.buttons.forEach(item=> item.print())
