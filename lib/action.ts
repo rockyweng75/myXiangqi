@@ -114,35 +114,35 @@ export default class Action {
   }
 
   private handleBoardClick(startX: number, startY: number): boolean {
-    let isReload = false;
+    // Pieces and move points sit on the board's grid intersections, so
+    // resolve the click to its nearest square rather than testing a small
+    // circular hit-radius per item - the latter leaves dead space within
+    // each cell where a click "misses" everything and silently deselects.
+    const clicked = pixelToSquare(startX, startY, this.geometry);
 
-    // Clicking an existing move point stages a move.
-    for (const point of this.movePoints) {
-      if (point.isInside(startX, startY) && this.selectedItem) {
-        this.stagePendingMove(this.selectedItem, point);
-        return true;
-      }
+    const point = this.movePoints.find((p) => p.square.x === clicked.x && p.square.y === clicked.y);
+    if (point && this.selectedItem) {
+      this.stagePendingMove(this.selectedItem, point);
+      return true;
     }
 
-    // Otherwise, treat this as (de)selecting a piece.
-    this.items.forEach((item) => {
-      if (item.isInside(startX, startY) && item.faction === this.state.turn) {
-        if (this.selectedItem !== null && this.selectedItem.id === item.id) {
-          this.deselect();
-        } else {
-          this.select(item);
-        }
-        isReload = true;
+    const item = this.items.find((i) => i.square.x === clicked.x && i.square.y === clicked.y);
+    if (item && item.faction === this.state.turn) {
+      if (this.selectedItem !== null && this.selectedItem.id === item.id) {
+        this.deselect();
       } else {
-        item.focus(false);
+        this.select(item);
       }
-    });
-
-    if (!isReload) {
+    } else {
       this.deselect();
     }
 
-    return isReload;
+    // Always redraw: every branch above mutates selection/focus state (even
+    // a "miss" click deselects), so skipping the redraw here would leave a
+    // stale highlight/move-points on screen until some later click happens
+    // to trigger one - this was the actual cause of clicks that "did
+    // nothing" until repeated.
+    return true;
   }
 
   private select(item: PieceView): void {

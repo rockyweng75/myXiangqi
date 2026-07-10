@@ -45,15 +45,4 @@ export default class MovePoint {
     this.ctx.stroke();
     this.ctx.restore();
   }
-
-  isInside(mouseX: number, mouseY: number): boolean {
-    const h = this.x;
-    const k = this.y;
-    const r = this.width / 2;
-    return (
-      Math.pow(mouseX, 2) + Math.pow(mouseY, 2) - 2 * h * mouseX - 2 * k * mouseY + Math.pow(h, 2) + Math.pow(k, 2) - Math.pow(r, 2) <=
-        0 &&
-      Math.pow(-2 * h, 2) + Math.pow(-2 * k, 2) - 4 * (Math.pow(h, 2) + Math.pow(k, 2) - Math.pow(r, 2)) > 0
-    );
-  }
 }
